@@ -1,3 +1,5 @@
+**LCA**
+
 1552：【例 1】点的距离
 
 
@@ -76,4 +78,96 @@ signed main()
 	return 0;
 }
 
+```
+
+
+1553：【例 2】暗的连锁
+
+```cpp
+
+#include<bits/stdc++.h>
+using namespace std;
+//#define int long long
+//typedef long long ll;
+const int N=2e5+10;
+int n,m,dep[N],fa[N][21],cha[N],ans;
+vector<int>g[N];
+void init(int u,int father)
+{
+	dep[u]=dep[father]+1;
+	fa[u][0]=father;
+	for(int i=1;i<=20;i++)
+	{
+		fa[u][i]=fa[fa[u][i-1]][i-1];	
+	}
+	for(auto v:g[u])
+	{
+		if(v!=father)
+		{
+			init(v,u);
+		}
+	}
+
+}
+int lca(int u,int v)
+{
+	if(dep[u]<dep[v])
+		swap(u,v);
+	for(int i=20;i>=0;i--)
+	{
+		if(dep[fa[u][i]]>=dep[v])
+			u=fa[u][i];
+		if(u==v)
+			return u;
+	}
+	for(int i=20;i>=0;i--)
+	{
+		if(fa[u][i]!=fa[v][i])
+		{
+			u=fa[u][i];
+			v=fa[v][i];
+		}
+	}
+	return fa[u][0];
+}
+int dfs(int u,int father)
+{
+	int res=cha[u];
+	for(auto v:g[u])
+	{
+		if(v==father)
+			continue;
+		int cnt=dfs(v,u);
+		if(cnt==0)
+			ans+=m;
+		else if(cnt==1)
+			ans++;
+		res+=cnt;
+	}
+	return res;
+} 
+signed main()
+{
+    ios::sync_with_stdio(false),cin.tie(0),cout.tie(0);
+	cin>>n>>m;
+	for(int i=1;i<n;i++)
+	{
+		int u,v;
+		cin>>u>>v;
+		g[u].push_back(v);
+		g[v].push_back(u);
+	}
+	init(1,0);
+	for(int i=1;i<=m;i++)
+	{
+		int u,v;
+		cin>>u>>v;
+		cha[u]++;
+		cha[v]++;
+		cha[lca(u,v)]-=2;
+	}
+	dfs(1,0);
+	cout<<ans;
+	return 0;
+}
 ```
