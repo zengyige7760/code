@@ -1,5 +1,151 @@
 **LCA**
 
+
+P4180 [BJWC2010] 严格次小生成树
+
+
+
+```cpp
+
+#include<bits/stdc++.h>
+using namespace std;
+
+typedef long long ll;
+const int N = 1e5 + 10;
+const int M = 3e5 + 10;
+const ll INF = 1e18; // 严格次小可能很大，用 long long 的极大值
+
+
+struct Edge {
+    int u, v, w;
+    bool is_tree; // 标记是否在最小生成树中
+    bool operator<(const Edge &o) const { return w < o.w; }
+} e[M];
+
+struct Node {
+    int v, w;
+};
+vector<Node> g[N]; // 你的 vector 存图风格
+
+int n, m, dep[N], fa[N][21], p[N];
+ll g1[N][21], g2[N][21]; // g1[u][i] 记录 u 到 2^i 祖先路径上的最大权值，g2 记录严格次大权值
+
+// 并查集找祖先
+int find(int x) { return p[x] == x ? x : p[x] = find(p[x]); }
+
+// 核心：合并两个区间的最大和严格次大值
+// 我们有四个待选值（两个区间的最大和次大），从中选出全局最大和严格小于全局最大的次大
+void update_vals(ll &m1, ll &m2, ll v1, ll v2) {
+    if (v1 > m1) {
+        m2 = max(m1, v2); // 原来的最大值退居二位，或者取新区间的次大
+        m1 = v1;          // 更新最大值
+    } else if (v1 < m1) {
+        m2 = max(m2, v1); // v1 小于最大值，尝试更新次大值
+    } else {
+        m2 = max(m2, v2); // v1 等于最大值，只能尝试用次大值 v2 更新
+    }
+}
+
+// 你的 init 风格，增加了权值倍增的维护
+void init(int u, int father, int w) {
+    dep[u] = dep[father] + 1;
+    fa[u][0] = father;
+    g1[u][0] = w;
+    g2[u][0] = -INF; // 初始次大值设为负无穷
+    
+    for(int i = 1; i <= 20; i++) {
+        fa[u][i] = fa[fa[u][i-1]][i-1];
+        // 关键：当前区间 [u, 2^i] 是由 [u, 2^(i-1)] 和 [fa, 2^(i-1)] 拼接而成
+        g1[u][i] = g1[u][i-1];
+        g2[u][i] = g2[u][i-1];
+        update_vals(g1[u][i], g2[u][i], g1[fa[u][i-1]][i-1], g2[fa[u][i-1]][i-1]);
+    }
+    
+    for(auto it : g[u]) {
+        if(it.v != father) init(it.v, u, it.w);
+    }
+}
+
+// 查询路径 u->v 上的最大和严格次大权值
+pair<ll, ll> query(int u, int v) {
+    ll m1 = -INF, m2 = -INF;
+    if(dep[u] < dep[v]) swap(u, v);
+    
+    // 先跳到同一高度，顺便更新最大/次大值
+    for(int i = 20; i >= 0; i--) {
+        if(dep[fa[u][i]] >= dep[v]) {
+            update_vals(m1, m2, g1[u][i], g2[u][i]);
+            u = fa[u][i];
+        }
+    }
+    if(u == v) return {m1, m2};
+    
+    // 一起向上跳，跳到 LCA 的下一层
+    for(int i = 20; i >= 0; i--) {
+        if(fa[u][i] != fa[v][i]) {
+            update_vals(m1, m2, g1[u][i], g2[u][i]);
+            update_vals(m1, m2, g1[v][i], g2[v][i]);
+            u = fa[u][i];
+            v = fa[v][i];
+        }
+    }
+    // 最后补上到 LCA 的最后两根边
+    update_vals(m1, m2, g1[u][0], g2[u][0]);
+    update_vals(m1, m2, g1[v][0], g2[v][0]);
+    return {m1, m2};
+}
+
+int main() {
+    n = read(); m = read();
+    for(int i = 1; i <= m; i++) {
+        e[i].u = read(); e[i].v = read(); e[i].w = read();
+    }
+    
+    // 1. Kruskal 算法求最小生成树 (MST)
+    sort(e + 1, e + m + 1);
+    for(int i = 1; i <= n; i++) p[i] = i;
+
+    ll mst_sum = 0;
+    int cnt = 0;
+    for(int i = 1; i <= m; i++) {
+        int fu = find(e[i].u), fv = find(e[i].v);
+        if(fu != fv) {
+            p[fu] = fv;
+            mst_sum += e[i].w;
+            e[i].is_tree = true; // 标记树边
+            g[e[i].u].push_back({e[i].v, e[i].w});
+            g[e[i].v].push_back({e[i].u, e[i].w});
+            if(++cnt == n - 1) break;
+        }
+    }
+
+    // 2. 预处理倍增信息，根节点为 1
+    init(1, 0, -INF);
+
+    // 3. 枚举所有非树边，尝试替换
+    ll min_delta = INF; // 记录最小的 (w - 路径边权)
+    for(int i = 1; i <= m; i++) {
+        if(e[i].is_tree) continue; // 跳过树边
+        
+        pair<ll, ll> res = query(e[i].u, e[i].v);
+        
+        // 严格次小的逻辑：
+        // 如果非树边权 w 大于路径最大边权 m1，则 delta = w - m1
+        if(e[i].w > res.first) {
+            min_delta = min(min_delta, (ll)e[i].w - res.first);
+        } 
+        // 如果 w 等于 m1，则必须替换路径上的严格次大边权 m2
+        else if(res.second != -INF) {
+            min_delta = min(min_delta, (ll)e[i].w - res.second);
+        }
+    }
+
+    // 输出最终答案：MST 的和 + 最小增量
+    printf("%lld\n", mst_sum + min_delta);
+    
+    return 0;
+}
+```
 1552：【例 1】点的距离
 
 
